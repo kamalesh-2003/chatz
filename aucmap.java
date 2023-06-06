@@ -1,5 +1,4 @@
 package com.example.auctioneer;
-
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Context;
@@ -41,6 +40,8 @@ import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QuerySnapshot;
 
 import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -203,8 +204,8 @@ public class aucmap extends AppCompatActivity {
 
 
     private void fetchComments() {
-        comments.orderBy("timestamp")
-                .get()
+
+        comments.get()
                 .addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
                     @Override
                     public void onComplete(@NonNull Task<QuerySnapshot> task) {
@@ -214,7 +215,6 @@ public class aucmap extends AppCompatActivity {
                                 List<DocumentSnapshot> documentSnapshots = querySnapshot.getDocuments();
                                 for (DocumentSnapshot documentSnapshot : documentSnapshots) {
                                     String message = documentSnapshot.getString("message");
-                                    String cityName = documentSnapshot.getString("city");
                                     addcomment(message);
                                 }
                             }
@@ -227,21 +227,31 @@ public class aucmap extends AppCompatActivity {
     }
 
 
-
     private void addcomment(String message) {
         View commentView = getLayoutInflater().inflate(R.layout.post_item, null);
         TextView messageTextView = commentView.findViewById(R.id.messageTextView);
         TextView dateTextView = commentView.findViewById(R.id.dateTextView);
         TextView timeTextView = commentView.findViewById(R.id.timeTextView);
 
-        // Set the comment message and other details
+        // Set the comment message
         messageTextView.setText(message);
-        // Set the date and time (if needed)
+
+        // Get the current date and time
+        SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy", Locale.getDefault());
+        SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
+        Date currentDate = new Date();
+        String date = dateFormat.format(currentDate);
+        String time = timeFormat.format(currentDate);
+
+        // Set the date and time in the respective TextViews
+        dateTextView.setText(date);
+        timeTextView.setText(time);
 
         // Add the click listener to the comment view
         commentView.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                // Send the message to another activity
                 Intent intent = new Intent(aucmap.this, post_holder_acti.class);
                 intent.putExtra("message", message);
                 startActivity(intent);
@@ -255,9 +265,11 @@ public class aucmap extends AppCompatActivity {
 
         layoutParams.setMargins(0, 0, 0, 10);
         commentView.setLayoutParams(layoutParams);
+
         // Add the comment view to the messageContainer LinearLayout
         messageContainer.addView(commentView, 0);
     }
+
 
 
     private void addcomment1(String message) {
