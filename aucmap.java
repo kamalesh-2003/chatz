@@ -180,6 +180,17 @@ public class aucmap extends AppCompatActivity {
         Map<String, Object> commentData = new HashMap<>();
         commentData.put("message", message);
 
+        // Get the current date and time
+        SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy", Locale.getDefault());
+        SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
+        Date currentDate = new Date();
+        String date = dateFormat.format(currentDate);
+        String time = timeFormat.format(currentDate);
+
+        // Add date and time to the comment data
+        commentData.put("date", date);
+        commentData.put("time", time);
+
         comments.add(commentData)
                 .addOnSuccessListener(new OnSuccessListener<DocumentReference>() {
                     @Override
@@ -189,7 +200,7 @@ public class aucmap extends AppCompatActivity {
                         String message = messageEditText.getText().toString().trim();
 
                         // Add the comment dynamically to the ScrollView
-                        addcomment(message);
+                        addcomment(message, date, time);
                         messageEditText.setText("");
                     }
                 })
@@ -203,9 +214,11 @@ public class aucmap extends AppCompatActivity {
     }
 
 
-    private void fetchComments() {
 
-        comments.get()
+    private void fetchComments() {
+        comments
+                .orderBy("time", Query.Direction.ASCENDING)
+                .get()
                 .addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
                     @Override
                     public void onComplete(@NonNull Task<QuerySnapshot> task) {
@@ -215,7 +228,9 @@ public class aucmap extends AppCompatActivity {
                                 List<DocumentSnapshot> documentSnapshots = querySnapshot.getDocuments();
                                 for (DocumentSnapshot documentSnapshot : documentSnapshots) {
                                     String message = documentSnapshot.getString("message");
-                                    addcomment(message);
+                                    String date = documentSnapshot.getString("date");
+                                    String time = documentSnapshot.getString("time");
+                                    addcomment(message, date, time);
                                 }
                             }
                         } else {
@@ -227,23 +242,15 @@ public class aucmap extends AppCompatActivity {
     }
 
 
-    private void addcomment(String message) {
+
+    private void addcomment(String message, String date, String time) {
         View commentView = getLayoutInflater().inflate(R.layout.post_item, null);
         TextView messageTextView = commentView.findViewById(R.id.messageTextView);
         TextView dateTextView = commentView.findViewById(R.id.dateTextView);
         TextView timeTextView = commentView.findViewById(R.id.timeTextView);
 
-        // Set the comment message
+        // Set the comment message, date, and time
         messageTextView.setText(message);
-
-        // Get the current date and time
-        SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy", Locale.getDefault());
-        SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
-        Date currentDate = new Date();
-        String date = dateFormat.format(currentDate);
-        String time = timeFormat.format(currentDate);
-
-        // Set the date and time in the respective TextViews
         dateTextView.setText(date);
         timeTextView.setText(time);
 
@@ -269,46 +276,4 @@ public class aucmap extends AppCompatActivity {
         // Add the comment view to the messageContainer LinearLayout
         messageContainer.addView(commentView, 0);
     }
-
-
-
-    private void addcomment1(String message) {
-
-
-        // Create a query to fetch the most recent comment from the crmessages subcollection
-        comments.limit(1)
-                .get()
-                .addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
-                    @Override
-                    public void onComplete(@NonNull Task<QuerySnapshot> task) {
-                        if (task.isSuccessful()) {
-                            QuerySnapshot querySnapshot = task.getResult();
-                            if (querySnapshot != null && !querySnapshot.isEmpty()) {
-                                DocumentSnapshot document = querySnapshot.getDocuments().get(0);
-                                String latestMessage = document.getString("message");
-
-                                // Create the comment view and add it to the messageContainer LinearLayout
-                                View commentView = getLayoutInflater().inflate(R.layout.post_item, null);
-                                TextView messageTextView = commentView.findViewById(R.id.messageTextView);
-                                TextView dateTextView = commentView.findViewById(R.id.dateTextView);
-                                TextView timeTextView = commentView.findViewById(R.id.timeTextView);
-
-                                // Set the comment message and other details
-                                messageTextView.setText(latestMessage);
-                                // Set the date and time (if needed)
-
-                                // Add the comment view to the messageContainer LinearLayout
-                                messageContainer.addView(commentView, 0);
-                            } else {
-                                // No comments found
-                                Toast.makeText(aucmap.this, "No comments found", Toast.LENGTH_SHORT).show();
-                            }
-                        } else {
-                            // Error occurred while fetching the most recent comment
-                            Toast.makeText(aucmap.this, "Failed to fetch the most recent comment", Toast.LENGTH_SHORT).show();
-                        }
-                    }
-                });
-    }
-
 }
