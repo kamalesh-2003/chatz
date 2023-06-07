@@ -1,4 +1,7 @@
 package com.example.auctioneer;
+
+import androidx.appcompat.app.AppCompatActivity;
+
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Context;
@@ -9,6 +12,7 @@ import android.location.Geocoder;
 import android.location.Location;
 import android.location.LocationManager;
 import android.os.Bundle;
+import android.util.Log;
 import android.os.Looper;
 import android.provider.Settings;
 import android.view.View;
@@ -19,7 +23,6 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
@@ -40,52 +43,60 @@ import com.google.firebase.firestore.Query;
 import com.google.firebase.firestore.QuerySnapshot;
 
 import java.io.IOException;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-public class aucmap extends AppCompatActivity {
-
+public class post_holder_acti extends AppCompatActivity {
     private FusedLocationProviderClient mFusedLocationClient;
     private TextView cityTextView;
     private EditText messageEditText;
-    private Button sendButton;
-    private LinearLayout messageContainer;
+    private Button sendButton1;
+    private LinearLayout messageContainer,topcontainer;
     private static final int PERMISSION_ID = 44;
+    Intent collectdat;
+    String message1;
+
 
     // Firebase Firestore
     private FirebaseFirestore firestore;
-    private CollectionReference comments;
-
+    private CollectionReference comments1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_aucmap);
+        setContentView(R.layout.activity_post_holder);
         cityTextView = findViewById(R.id.cityTextView);
         messageEditText = findViewById(R.id.commentEditText);
-        sendButton = findViewById(R.id.postCommentButton);
+        sendButton1 = findViewById(R.id.postCommentButton);
         messageContainer = findViewById(R.id.messageContainer);
+        topcontainer = findViewById(R.id.topLinearLayout);
 
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         firestore = FirebaseFirestore.getInstance();
+        collectdat =getIntent();
+        message1 = collectdat.getStringExtra("message");
+        comments1 = firestore.collection("crsubcomments")
+                .document(message1).collection("crms");
+        addComment(message1);
+        fetchsubComments();
+
 
         getLastLocation();
 
-        sendButton.setOnClickListener(new View.OnClickListener() {
+        sendButton1.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 String message = messageEditText.getText().toString().trim();
                 if (!message.isEmpty()) {
-                    String cityName = cityTextView.getText().toString().substring(19); // Extract city name from the TextView
-                    sendComment(message); // Call the sendComment method
-                    //messageEditText.setText("");
+                        sendComment(message);
+                        messageEditText.setText("");
                 }
             }
         });
+
+
 
     }
 
@@ -102,14 +113,12 @@ public class aucmap extends AppCompatActivity {
                                 requestNewLocationData();
                             } else {
                                 // Reverse geocoding to get the city name
-                                Geocoder geocoder = new Geocoder(aucmap.this, Locale.getDefault());
+                                Geocoder geocoder = new Geocoder(post_holder_acti.this, Locale.getDefault());
                                 try {
                                     List<Address> addresses = geocoder.getFromLocation(location.getLatitude(), location.getLongitude(), 1);
                                     if (addresses.size() > 0) {
                                         String cityName = addresses.get(0).getLocality();
-                                        updateCityTextView(cityTextView, cityName);
-                                        comments = firestore.collection("chatrooms").document(cityName).collection("crmessages");
-                                        fetchComments();
+
                                     }
                                 } catch (IOException e) {
                                     e.printStackTrace();
@@ -128,10 +137,6 @@ public class aucmap extends AppCompatActivity {
         } else {
             requestPermissions();
         }
-    }
-
-    public static void updateCityTextView(TextView cityTextView, String cityName) {
-        cityTextView.setText("Trending posts in " + cityName);
     }
 
     private boolean checkPermissions() {
@@ -176,49 +181,39 @@ public class aucmap extends AppCompatActivity {
     }
 
     private void sendComment(String message) {
-        // Create a new comment document in Firestore
-        Map<String, Object> commentData = new HashMap<>();
-        commentData.put("message", message);
+        Log.d("Message", "Message value: " + message);
 
-        // Get the current date and time
-        SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy", Locale.getDefault());
-        SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
-        Date currentDate = new Date();
-        String date = dateFormat.format(currentDate);
-        String time = timeFormat.format(currentDate);
+        // Retrieve the comment message from the EditText
+        String commentMessage = messageEditText.getText().toString().trim();
 
-        // Add date and time to the comment data
-        commentData.put("date", date);
-        commentData.put("time", time);
+        if (!commentMessage.isEmpty()) {
+            // Create a new comment document in Firestore
+            Map<String, Object> commentData = new HashMap<>();
+            commentData.put("message", commentMessage);
 
-        comments.add(commentData)
-                .addOnSuccessListener(new OnSuccessListener<DocumentReference>() {
-                    @Override
-                    public void onSuccess(DocumentReference documentReference) {
-                        // Comment sent successfully
-                        // Retrieve the comment message
-                        String message = messageEditText.getText().toString().trim();
-
-                        // Add the comment dynamically to the ScrollView
-                        addcomment(message, date, time);
-                        messageEditText.setText("");
-                    }
-                })
-                .addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        // Failed to send comment
-                        Toast.makeText(aucmap.this, "Failed to send comment", Toast.LENGTH_SHORT).show();
-                    }
-                });
+            comments1.add(commentData)
+                    .addOnSuccessListener(new OnSuccessListener<DocumentReference>() {
+                        @Override
+                        public void onSuccess(DocumentReference documentReference) {
+                            // Comment sent successfully
+                            // Add the comment dynamically to the ScrollView
+                            addcomment1(commentMessage);
+                            messageEditText.setText("");
+                        }
+                    })
+                    .addOnFailureListener(new OnFailureListener() {
+                        @Override
+                        public void onFailure(@NonNull Exception e) {
+                            // Failed to send comment
+                            Toast.makeText(post_holder_acti.this, "Failed to send comment", Toast.LENGTH_SHORT).show();
+                        }
+                    });
+        }
     }
 
 
-
-    private void fetchComments() {
-        comments
-                .orderBy("time", Query.Direction.ASCENDING)
-                .get()
+    private void fetchsubComments() {
+        comments1.get()
                 .addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
                     @Override
                     public void onComplete(@NonNull Task<QuerySnapshot> task) {
@@ -228,43 +223,47 @@ public class aucmap extends AppCompatActivity {
                                 List<DocumentSnapshot> documentSnapshots = querySnapshot.getDocuments();
                                 for (DocumentSnapshot documentSnapshot : documentSnapshots) {
                                     String message = documentSnapshot.getString("message");
-                                    String date = documentSnapshot.getString("date");
-                                    String time = documentSnapshot.getString("time");
-                                    addcomment(message, date, time);
+                                    addcomment1(message);
                                 }
                             }
                         } else {
                             // Error occurred while fetching comments
-                            Toast.makeText(aucmap.this, "Failed to fetch comments", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(post_holder_acti.this, "Failed to fetch comments", Toast.LENGTH_SHORT).show();
                         }
                     }
                 });
     }
 
-
-
-    private void addcomment(String message, String date, String time) {
+    private void addComment(String message) {
         View commentView = getLayoutInflater().inflate(R.layout.post_item, null);
         TextView messageTextView = commentView.findViewById(R.id.messageTextView);
         TextView dateTextView = commentView.findViewById(R.id.dateTextView);
         TextView timeTextView = commentView.findViewById(R.id.timeTextView);
 
-        // Set the comment message, date, and time
+        // Set the comment message and other details
         messageTextView.setText(message);
-        dateTextView.setText(date);
-        timeTextView.setText(time);
 
-        // Add the click listener to the comment view
-        commentView.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                // Send the message to another activity
-                Intent intent = new Intent(aucmap.this, post_holder_acti.class);
-                intent.putExtra("message", message);
-                startActivity(intent);
-            }
-        });
+        LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
 
+        layoutParams.setMargins(0, 10, 0, 10);
+        commentView.setLayoutParams(layoutParams);
+
+        // Add the comment view to the messageContainer LinearLayout
+
+        topcontainer.addView(commentView, 0);
+    }
+    private void addcomment1(String message) {
+        Log.d("Message", "Message value: " + message);
+        View commentView = getLayoutInflater().inflate(R.layout.post_item, null);
+        TextView messageTextView1 = commentView.findViewById(R.id.messageTextView);
+        TextView dateTextView = commentView.findViewById(R.id.dateTextView);
+        TextView timeTextView = commentView.findViewById(R.id.timeTextView);
+
+        // Set the comment message and other details
+        messageTextView1.setText(message);
         LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -272,7 +271,6 @@ public class aucmap extends AppCompatActivity {
 
         layoutParams.setMargins(0, 0, 0, 10);
         commentView.setLayoutParams(layoutParams);
-
         // Add the comment view to the messageContainer LinearLayout
         messageContainer.addView(commentView, 0);
     }
