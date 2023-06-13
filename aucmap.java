@@ -8,24 +8,42 @@ import android.content.pm.PackageManager;
 import android.location.Address;
 import android.location.Geocoder;
 import android.location.Location;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.widget.PopupMenu;
+import com.google.android.gms.ads.MobileAds;
+import com.google.android.gms.ads.initialization.InitializationStatus;
+import com.google.android.gms.ads.initialization.OnInitializationCompleteListener;
+import com.google.android.gms.ads.AdRequest;
+import com.google.android.gms.ads.AdView;
+
+
 import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Looper;
+import android.os.Handler;
 import android.provider.Settings;
 import android.view.View;
+import android.view.ViewTreeObserver;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
+import com.google.android.gms.ads.MobileAds;
+import com.google.android.gms.ads.initialization.InitializationStatus;
+import com.google.android.gms.ads.initialization.OnInitializationCompleteListener;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
@@ -36,15 +54,15 @@ import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.firestore.CollectionReference;
-import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.DocumentReference;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.Query;
+
 import com.google.firebase.firestore.QuerySnapshot;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.StorageReference;
 import com.google.firebase.storage.UploadTask;
+import com.squareup.picasso.Picasso;
 
 import java.io.IOException;
 import java.text.SimpleDateFormat;
@@ -60,27 +78,69 @@ public class aucmap extends AppCompatActivity {
     private FusedLocationProviderClient mFusedLocationClient;
     private TextView cityTextView;
     private EditText messageEditText;
-    private Button sendButton;
+    private SwipeRefreshLayout swipeRefreshLayout;
+    private ImageButton sendButton;
+    private AdView mAdView;
+    ScrollView scrollty;
     private ImageButton picsendbutton;
     private LinearLayout messageContainer;
     private static final int PERMISSION_ID = 44;
     private int SELECT_PICTURE = 200;
     // Firebase Firestore
     private FirebaseFirestore firestore;
-    private CollectionReference comments,picsbase;
+    private CollectionReference comments;
 
     private FirebaseStorage storage;
     private StorageReference storageRef;
+    Uri selectedImageUri;
+    String downloadUrl;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_aucmap);
+        MobileAds.initialize(this, new OnInitializationCompleteListener() {
+            @Override
+            public void onInitializationComplete(InitializationStatus initializationStatus) {
+            }
+        });
+        scrollty = findViewById(R.id.scroll1);
+        swipeRefreshLayout = findViewById(R.id.swipeRefreshLayout);
+        swipeRefreshLayout.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
+            @Override
+            public void onRefresh() {
+                refreshPage();
+            }
+        });
+
+        scrollty.getViewTreeObserver().addOnScrollChangedListener(new ViewTreeObserver.OnScrollChangedListener() {
+            @Override
+            public void onScrollChanged() {
+                if (scrollty.getScrollY() == 0) {
+                    swipeRefreshLayout.setEnabled(true);
+                } else {
+                    swipeRefreshLayout.setEnabled(false);
+                }
+            }
+        });
+
+        swipeRefreshLayout = findViewById(R.id.swipeRefreshLayout);
+        swipeRefreshLayout.setOnRefreshListener(new SwipeRefreshLayout.OnRefreshListener() {
+            @Override
+            public void onRefresh() {
+                // Perform the refresh action here
+                refreshPage();
+            }
+        });
+
+
         cityTextView = findViewById(R.id.cityTextView);
         messageEditText = findViewById(R.id.commentEditText);
         sendButton = findViewById(R.id.postCommentButton);
         messageContainer = findViewById(R.id.messageContainer);
         picsendbutton = findViewById(R.id.picsend);
+
+
 
         mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
         firestore = FirebaseFirestore.getInstance();
@@ -96,7 +156,6 @@ public class aucmap extends AppCompatActivity {
                 if (!message.isEmpty()) {
                     String cityName = cityTextView.getText().toString().substring(19); // Extract city name from the TextView
                     sendComment(message); // Call the sendComment method
-                    //messageEditText.setText("");
                 }
             }
         });
@@ -107,6 +166,11 @@ public class aucmap extends AppCompatActivity {
                 picupload();
             }
         });
+    }
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.menu_dropdown, menu);
+        return true;
     }
 
     @SuppressLint("MissingPermission")
@@ -233,31 +297,49 @@ public class aucmap extends AppCompatActivity {
                 });
     }
 
+
+
     private void fetchComments() {
-        comments
-                .orderBy("time", Query.Direction.ASCENDING)
-                .get()
-                .addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
-                    @Override
-                    public void onComplete(@NonNull Task<QuerySnapshot> task) {
-                        if (task.isSuccessful()) {
-                            QuerySnapshot querySnapshot = task.getResult();
-                            if (querySnapshot != null) {
-                                List<DocumentSnapshot> documentSnapshots = querySnapshot.getDocuments();
-                                for (DocumentSnapshot documentSnapshot : documentSnapshots) {
-                                    String message = documentSnapshot.getString("message");
-                                    String date = documentSnapshot.getString("date");
-                                    String time = documentSnapshot.getString("time");
-                                    addcomment(message, date, time);
+        comments.orderBy("time").get().addOnCompleteListener(new OnCompleteListener<QuerySnapshot>() {
+            @Override
+            public void onComplete(@NonNull Task<QuerySnapshot> task) {
+                if (task.isSuccessful()) {
+                    QuerySnapshot querySnapshot = task.getResult();
+                    if (querySnapshot != null) {
+                        List<DocumentSnapshot> documentSnapshots = querySnapshot.getDocuments();
+                        for (DocumentSnapshot documentSnapshot : documentSnapshots) {
+                            String message = documentSnapshot.getString("message");
+                            String date = documentSnapshot.getString("date");
+                            String time = documentSnapshot.getString("time");
+                            String boxtext = documentSnapshot.getString("boxtext");
+
+
+                            // Create the regular expression pattern
+                            String regex = "\\bhttps\\b";
+
+                            // Create a Pattern object
+                            Pattern pattern = Pattern.compile(regex);
+
+                            // Create a Matcher object
+                            Matcher matcher = pattern.matcher(message);
+                             if (matcher.find()) {
+                                 Uri pichan= Uri.parse(message);
+                                 picadd(pichan, date, time,boxtext);
+                                } else {
+                                 addcomment(message, date, time);
                                 }
-                            }
-                        } else {
-                            // Error occurred while fetching comments
-                            Toast.makeText(aucmap.this, "Failed to fetch comments", Toast.LENGTH_SHORT).show();
                         }
                     }
-                });
+                } else {
+                    // Error occurred while fetching comments
+                    Toast.makeText(aucmap.this, "Failed to fetch comments", Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
     }
+
+
+
 
     private void addcomment(String message, String date, String time) {
         View commentView = getLayoutInflater().inflate(R.layout.post_item, null);
@@ -275,7 +357,7 @@ public class aucmap extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 // Send the message to another activity
-                Intent intent = new Intent(aucmap.this, post_holder_acti.class);
+                Intent intent = new Intent(aucmap.this, adpages.class);
                 intent.putExtra("message", message);
                 startActivity(intent);
             }
@@ -296,7 +378,7 @@ public class aucmap extends AppCompatActivity {
     private void picupload() {
         Intent i = new Intent();
         i.setType("image/*");
-        i.setAction(Intent.ACTION_GET_CONTENT);
+        i.setAction(Intent.ACTION_OPEN_DOCUMENT);
 
         // pass the constant to compare it
         // with the returned requestCode
@@ -314,7 +396,7 @@ public class aucmap extends AppCompatActivity {
             // SELECT_PICTURE constant
             if (requestCode == SELECT_PICTURE) {
                 // Get the url of the image from data
-                Uri selectedImageUri = data.getData();
+                selectedImageUri = data.getData();
                 if (null != selectedImageUri) {
                     String imageName = UUID.randomUUID().toString();
                     final StorageReference imageRef = storage.getReference().child("images").child(imageName);
@@ -330,33 +412,27 @@ public class aucmap extends AppCompatActivity {
                                             .addOnSuccessListener(new OnSuccessListener<Uri>() {
                                                 @Override
                                                 public void onSuccess(Uri uri) {
-                                                    // Download URL received
-                                                    String imageURL = uri.toString();
-                                                    // Process the image URL (e.g., add to the Firestore document)
-                                                    // ...
+                                                    downloadUrl = uri.toString();
                                                     Toast.makeText(aucmap.this, "Image uploaded successfully", Toast.LENGTH_SHORT).show();
-                                                    View commentView = getLayoutInflater().inflate(R.layout.pic_post_item, null);
-                                                    TextView messageTextView = commentView.findViewById(R.id.messageTextView);
-                                                    TextView dateTextView = commentView.findViewById(R.id.dateTextView);
-                                                    TextView timeTextView = commentView.findViewById(R.id.timeTextView);
-                                                    ImageView imgpicpost = commentView.findViewById(R.id.pic1);
+                                                    Map<String, Object> commentData = new HashMap<>();
+                                                    commentData.put("message", downloadUrl);
+                                                    SimpleDateFormat dateFormat = new SimpleDateFormat("dd-MM-yyyy", Locale.getDefault());
+                                                    SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
+                                                    String boxtext = messageEditText.getText().toString();
+                                                    Date currentDate = new Date();
+                                                    String date = dateFormat.format(currentDate);
+                                                    String time = timeFormat.format(currentDate);
+                                                    commentData.put("date", date);
+                                                    commentData.put("time", time);
+                                                    commentData.put("boxtext",boxtext);
+                                                    comments.add(commentData)
+                                                            .addOnSuccessListener(new OnSuccessListener<DocumentReference>() {
+                                                                @Override
+                                                                public void onSuccess(DocumentReference documentReference) {
+                                                                    picadd(selectedImageUri,date,time,boxtext);
+                                                                }
+                                                            });
 
-                                                    imgpicpost.setImageURI(selectedImageUri);
-                                                    String message= messageEditText.getText().toString().trim();
-                                                    if(!message.isEmpty()){
-                                                        messageTextView.setText(message);
-                                                        messageEditText.setText("");
-                                                    }
-                                                    LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(
-                                                            LinearLayout.LayoutParams.MATCH_PARENT,
-                                                            LinearLayout.LayoutParams.WRAP_CONTENT
-                                                    );
-
-                                                    layoutParams.setMargins(0, 0, 0, 10);
-                                                    commentView.setLayoutParams(layoutParams);
-
-                                                    // Add the comment view to the messageContainer LinearLayout
-                                                    messageContainer.addView(commentView, 0);
                                                 }
                                             })
                                             .addOnFailureListener(new OnFailureListener() {
@@ -373,10 +449,68 @@ public class aucmap extends AppCompatActivity {
                                 public void onFailure(@NonNull Exception e) {
                                     // Failed to upload image
                                     Toast.makeText(aucmap.this, "Failed to upload image", Toast.LENGTH_SHORT).show();
+
                                 }
                             });
                 }
             }
         }
     }
+    private void picadd(Uri selectedImageUri, String date, String time,String boxtest) {
+        View commentView = getLayoutInflater().inflate(R.layout.pic_post_item, null);
+        TextView messagetextView = commentView.findViewById(R.id.messageTextView);
+        TextView dateTextView = commentView.findViewById(R.id.dateTextView);
+        TextView timeTextView = commentView.findViewById(R.id.timeTextView);
+        ImageView imgpicpost = commentView.findViewById(R.id.pic1);
+        String message = messageEditText.getText().toString().trim();
+        if(!message.isEmpty()){
+            messagetextView.setText(boxtest);
+        }
+
+        dateTextView.setText(date);
+        timeTextView.setText(time);
+        Picasso.get().load(selectedImageUri).into(imgpicpost);
+        messageEditText.setText("");
+
+        LinearLayout.LayoutParams layoutParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+
+        commentView.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                // Send the message to another activity
+                Intent intent = new Intent(aucmap.this, post_holder_acti.class);
+                intent.putExtra("message", message);
+                intent.putExtra("date", date);
+                intent.putExtra("time", time);
+                intent.putExtra("boxtext", boxtest);
+                startActivity(intent);
+            }
+        });
+
+        layoutParams.setMargins(0, 0, 0, 10);
+        commentView.setLayoutParams(layoutParams);
+
+        messageContainer.addView(commentView, 0);
+    }
+
+    private void refreshPage() {
+        // Implement your refresh logic here
+        // This method will be called when the user performs the refresh action
+        // You can reload data, update views, or perform any other actions to refresh the page
+        // For example, you can make API calls to fetch new data
+
+        // Simulate a delay before stopping the refresh animation
+        new Handler().postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                // Update your data or views here
+                // Stop the refresh animation
+                swipeRefreshLayout.setRefreshing(false);
+            }
+        }, 2000); // Simulate a 2-second delay, replace with your actual logic
+    }
+
 }
